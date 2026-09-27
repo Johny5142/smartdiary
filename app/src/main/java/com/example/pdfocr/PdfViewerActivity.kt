@@ -9,7 +9,9 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -29,6 +31,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -124,15 +127,6 @@ fun ViewerScreen() {
                     IconButton(onClick = viewModel::previousPage, enabled = state.currentPage > 0) {
                         Text("‹")
                     }
-                    IconButton(onClick = { viewModel.setZoom(state.zoom * 0.8f) }) {
-                        Icon(Icons.Default.ZoomOut, contentDescription = "Zoom out")
-                    }
-                    Spacer(Modifier.weight(1f))
-                    Text("${(state.zoom * 100).toInt()}%")
-                    Spacer(Modifier.weight(1f))
-                    IconButton(onClick = { viewModel.setZoom(state.zoom * 1.25f) }) {
-                        Icon(Icons.Default.ZoomIn, contentDescription = "Zoom in")
-                    }
                     IconButton(
                         onClick = viewModel::nextPage,
                         enabled = state.currentPage < state.pageCount - 1
@@ -166,14 +160,6 @@ fun ViewerScreen() {
                 }
             }
 
-            ModeSwitch(
-                selectionMode = state.selectionMode,
-                onToggle = viewModel::setSelectionMode,
-                modifier = Modifier
-                    .align(Alignment.CenterEnd)
-                    .padding(padding)
-                    .padding(end = 12.dp)
-            )
         }
     }
 
@@ -245,37 +231,6 @@ fun ViewerScreen() {
     }
 }
 
-@Composable
-private fun ModeSwitch(
-    selectionMode: Boolean,
-    onToggle: (Boolean) -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Surface(
-        modifier = modifier,
-        shape = MaterialTheme.shapes.large,
-        color = MaterialTheme.colorScheme.surfaceVariant,
-        tonalElevation = 4.dp
-    ) {
-        Row(
-            Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(
-                imageVector = if (selectionMode) Icons.Default.Translate else Icons.Default.PanTool,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary
-            )
-            Spacer(Modifier.width(8.dp))
-            Text(
-                text = if (selectionMode) "Translate" else "Move",
-                style = MaterialTheme.typography.labelMedium
-            )
-            Spacer(Modifier.width(8.dp))
-            Switch(checked = selectionMode, onCheckedChange = onToggle)
-        }
-    }
-}
 
 @Composable
 fun ZoomablePage(
@@ -292,45 +247,61 @@ fun ZoomablePage(
     Box(
         modifier
             .clipToBounds()
-            .pointerInput(state.selectionMode) {
+            // Pinch zoom + pan
+            .pointerInput(Unit) {
                 detectTransformGestures { _, pan, zoom, _ ->
                     val newZoom = (state.zoom * zoom).coerceIn(1f, 5f)
                     if (zoom != 1f) onZoom(newZoom)
-                    if (!state.selectionMode || zoom > 1.01f) {
-                        offset = Offset(
-                            (offset.x + pan.x).coerceIn(-2000f, 2000f),
-                            (offset.y + pan.y).coerceIn(-2000f, 2000f)
-                        )
-                    }
-                }
-            }
-            .pointerInput(state.selectionMode, bitmap) {
-                if (state.selectionMode) {
-                    detectDragGestures(
-                        onDragStart = { position ->
-                            selectionStart = position
-                            selectionEnd = position
-                        },
-                        onDrag = { change, _ ->
-                            selectionEnd = change.position
-                        },
-                        onDragEnd = {
-                            val start = selectionStart
-                            val end = selectionEnd
-                            if (start != null && end != null) {
-                                val x1 = minOf(start.x, end.x) / size.width
-                                val x2 = maxOf(start.x, end.x) / size.width
-                                val y1 = minOf(start.y, end.y) / size.height
-                                val y2 = maxOf(start.y, end.y) / size.height
-                                if (x2 - x1 > 0.01f || y2 - y1 > 0.01f) {
-                                    onPhraseSelected(x1, y1, x2, y2)
-                                }
-                            }
-                            selectionStart = null
-                            selectionEnd = null
-                        }
+                    offset = Offset(
+                        (offset.x + pan.x).coerceIn(-2000f, 2000f),
+                        (offset.y + pan.y).coerceIn(-2000f, 2000f)
                     )
                 }
+            }
+            // Single-finger pan
+            .pointerInput(Unit) {
+                awaitEachGesture {
+                    awaitFirstDown(requireUnconsumed = false)
+                    do {
+                        val event = awaitPointerEvent()
+                        if (event.changes.size == 1) {
+                            val change = event.changes.first()
+                            if (change.pressed && selectionStart == null) {
+                                offset = Offset(
+                                    (offset.x + change.positionChange().x).coerceIn(-2000f, 2000f),
+                                    (offset.y + change.positionChange().y).coerceIn(-2000f, 2000f)
+                                )
+                            }
+                        }
+                    } while (event.changes.any { it.pressed })
+                }
+            }
+            // Long-press + drag = word/phrase selection
+            .pointerInput(bitmap) {
+                detectDragGesturesAfterLongPress(
+                    onDragStart = { position ->
+                        selectionStart = position
+                        selectionEnd = position
+                    },
+                    onDrag = { change, _ ->
+                        selectionEnd = change.position
+                    },
+                    onDragEnd = {
+                        val start = selectionStart
+                        val end = selectionEnd
+                        if (start != null && end != null) {
+                            val x1 = minOf(start.x, end.x) / size.width
+                            val x2 = maxOf(start.x, end.x) / size.width
+                            val y1 = minOf(start.y, end.y) / size.height
+                            val y2 = maxOf(start.y, end.y) / size.height
+                            if (x2 - x1 > 0.005f || y2 - y1 > 0.005f) {
+                                onPhraseSelected(x1, y1, x2, y2)
+                            }
+                        }
+                        selectionStart = null
+                        selectionEnd = null
+                    }
+                )
             }
     ) {
         Image(

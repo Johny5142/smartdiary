@@ -76,8 +76,7 @@ class PdfViewerViewModel(application: Application) : AndroidViewModel(applicatio
             ViewerUiState(
                 documentUri = uri,
                 zoom = it.zoom,
-                selectionMode = it.selectionMode,
-                dictionaryName = it.dictionaryName,
+                                dictionaryName = it.dictionaryName,
                 dictionary = it.dictionary
             )
         }
@@ -140,13 +139,8 @@ class PdfViewerViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
-    fun setSelectionMode(enabled: Boolean) {
-        _uiState.update { it.copy(selectionMode = enabled) }
-    }
-
-    fun onPhraseSelected(left: Float, top: Float, right: Float, bottom: Float) {
-        if (!uiState.value.selectionMode) return
-        val state = uiState.value
+        fun onPhraseSelected(left: Float, top: Float, right: Float, bottom: Float) {
+                val state = uiState.value
         val lines = ocrCache[state.currentPage] ?: return
         val phrase = findWordsInSelection(lines, left, top, right, bottom)
         if (phrase.isBlank()) return
