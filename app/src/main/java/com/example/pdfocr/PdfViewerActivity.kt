@@ -9,13 +9,12 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.awaitEachGesture
-import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
@@ -31,8 +30,9 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.pdfocr.data.local.DictionaryEntryEntity
@@ -127,6 +127,13 @@ fun ViewerScreen() {
                     IconButton(onClick = viewModel::previousPage, enabled = state.currentPage > 0) {
                         Text("‹")
                     }
+                    Spacer(Modifier.width(12.dp))
+                    PageNumberField(
+                        currentPage = state.currentPage,
+                        pageCount = state.pageCount,
+                        onGoTo = viewModel::goToPage
+                    )
+                    Spacer(Modifier.width(12.dp))
                     IconButton(
                         onClick = viewModel::nextPage,
                         enabled = state.currentPage < state.pageCount - 1
@@ -159,7 +166,6 @@ fun ViewerScreen() {
                     CircularProgressIndicator()
                 }
             }
-
         }
     }
 
@@ -231,7 +237,6 @@ fun ViewerScreen() {
     }
 }
 
-
 @Composable
 fun ZoomablePage(
     state: ViewerUiState,
@@ -247,36 +252,30 @@ fun ZoomablePage(
     Box(
         modifier
             .clipToBounds()
-            // Pinch zoom + pan
             .pointerInput(Unit) {
-                detectTransformGestures { _, pan, zoom, _ ->
-                    val newZoom = (state.zoom * zoom).coerceIn(1f, 5f)
-                    if (zoom != 1f) onZoom(newZoom)
+                detectTransformGestures { centroid, pan, gestureZoom, _ ->
+                    val newZoom = (state.zoom * gestureZoom).coerceIn(1f, 5f)
+                    if (gestureZoom != 1f) onZoom(newZoom)
+
+                    if (gestureZoom != 1f) {
+                        val focus = centroid
+                        val old = offset
+                        offset = Offset(
+                            focus.x - (focus.x - old.x) * gestureZoom + pan.x,
+                            focus.y - (focus.y - old.y) * gestureZoom + pan.y
+                        )
+                    } else {
+                        offset = Offset(offset.x + pan.x, offset.y + pan.y)
+                    }
+
+                    val maxX = size.width * (state.zoom - 1f) / 2f + 200f
+                    val maxY = size.height * (state.zoom - 1f) / 2f + 200f
                     offset = Offset(
-                        (offset.x + pan.x).coerceIn(-2000f, 2000f),
-                        (offset.y + pan.y).coerceIn(-2000f, 2000f)
+                        offset.x.coerceIn(-maxX, maxX),
+                        offset.y.coerceIn(-maxY, maxY)
                     )
                 }
             }
-            // Single-finger pan
-            .pointerInput(Unit) {
-                awaitEachGesture {
-                    awaitFirstDown(requireUnconsumed = false)
-                    do {
-                        val event = awaitPointerEvent()
-                        if (event.changes.size == 1) {
-                            val change = event.changes.first()
-                            if (change.pressed && selectionStart == null) {
-                                offset = Offset(
-                                    (offset.x + change.positionChange().x).coerceIn(-2000f, 2000f),
-                                    (offset.y + change.positionChange().y).coerceIn(-2000f, 2000f)
-                                )
-                            }
-                        }
-                    } while (event.changes.any { it.pressed })
-                }
-            }
-            // Long-press + drag = word/phrase selection
             .pointerInput(bitmap) {
                 detectDragGesturesAfterLongPress(
                     onDragStart = { position ->
@@ -328,6 +327,40 @@ fun ZoomablePage(
         if (state.isRendering) {
             LinearProgressIndicator(Modifier.align(Alignment.TopCenter).fillMaxWidth())
         }
+    }
+}
+
+@Composable
+fun PageNumberField(
+    currentPage: Int,
+    pageCount: Int,
+    onGoTo: (Int) -> Unit
+) {
+    var text by remember(currentPage) { mutableStateOf((currentPage + 1).toString()) }
+
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        OutlinedTextField(
+            value = text,
+            onValueChange = { input ->
+                text = input.filter { it.isDigit() }.take(4)
+            },
+            modifier = Modifier.width(80.dp),
+            singleLine = true,
+            enabled = pageCount > 0,
+            label = { Text("of $pageCount") },
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+            textStyle = MaterialTheme.typography.bodyMedium.copy(textAlign = TextAlign.Center)
+        )
+        Spacer(Modifier.width(6.dp))
+        TextButton(
+            onClick = {
+                val page = text.toIntOrNull() ?: return@TextButton
+                if (page in 1..pageCount) {
+                    onGoTo(page - 1)
+                }
+            },
+            enabled = pageCount > 0
+        ) { Text("Go") }
     }
 }
 
@@ -391,7 +424,6 @@ fun TranslationPopup(
         }
     }
 }
-
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
