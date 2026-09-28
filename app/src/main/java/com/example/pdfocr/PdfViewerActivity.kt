@@ -245,35 +245,37 @@ fun ZoomablePage(
     modifier: Modifier = Modifier
 ) {
     val bitmap = state.pageBitmap ?: return
+    // Local zoom for instant gesture feedback; ViewModel zoom drives re-render quality.
+    var zoom by remember(bitmap) { mutableFloatStateOf(state.zoom) }
     var offset by remember(bitmap) { mutableStateOf(Offset.Zero) }
     var selectionStart by remember(bitmap) { mutableStateOf<Offset?>(null) }
     var selectionEnd by remember(bitmap) { mutableStateOf<Offset?>(null) }
 
+    // Follow external zoom changes (e.g. re-render) unless mid-gesture
+
     Box(
         modifier
             .clipToBounds()
-            .pointerInput(Unit) {
+            .pointerInput(bitmap) {
                 detectTransformGestures { centroid, pan, gestureZoom, _ ->
-                    val newZoom = (state.zoom * gestureZoom).coerceIn(1f, 5f)
-                    if (gestureZoom != 1f) onZoom(newZoom)
+                    val newZoom = (zoom * gestureZoom).coerceIn(1f, 5f)
+                    zoom = newZoom
 
-                    if (gestureZoom != 1f) {
-                        val focus = centroid
-                        val old = offset
-                        offset = Offset(
-                            focus.x - (focus.x - old.x) * gestureZoom + pan.x,
-                            focus.y - (focus.y - old.y) * gestureZoom + pan.y
-                        )
-                    } else {
-                        offset = Offset(offset.x + pan.x, offset.y + pan.y)
-                    }
+                    // Zoom around gesture centroid, then pan
+                    offset = Offset(
+                        centroid.x - (centroid.x - offset.x) * gestureZoom + pan.x,
+                        centroid.y - (centroid.y - offset.y) * gestureZoom + pan.y
+                    )
 
-                    val maxX = size.width * (state.zoom - 1f) / 2f + 200f
-                    val maxY = size.height * (state.zoom - 1f) / 2f + 200f
+                    // Clamp pan to page bounds
+                    val maxX = size.width * (newZoom - 1f) / 2f + 100f
+                    val maxY = size.height * (newZoom - 1f) / 2f + 100f
                     offset = Offset(
                         offset.x.coerceIn(-maxX, maxX),
                         offset.y.coerceIn(-maxY, maxY)
                     )
+
+                    if (gestureZoom != 1f) onZoom(newZoom)
                 }
             }
             .pointerInput(bitmap) {
@@ -289,11 +291,17 @@ fun ZoomablePage(
                         val start = selectionStart
                         val end = selectionEnd
                         if (start != null && end != null) {
-                            val x1 = minOf(start.x, end.x) / size.width
-                            val x2 = maxOf(start.x, end.x) / size.width
-                            val y1 = minOf(start.y, end.y) / size.height
-                            val y2 = maxOf(start.y, end.y) / size.height
-                            if (x2 - x1 > 0.005f || y2 - y1 > 0.005f) {
+                            // Account for zoom/pan: convert screen coords to page coords
+                            val invZoom = 1f / zoom
+                            val sx = start.x
+                            val sy = start.y
+                            val ex = end.x
+                            val ey = end.y
+                            val x1 = ((minOf(sx, ex) - offset.x) * invZoom / size.width).coerceIn(0f, 1f)
+                            val x2 = ((maxOf(sx, ex) - offset.x) * invZoom / size.width).coerceIn(0f, 1f)
+                            val y1 = ((minOf(sy, ey) - offset.y) * invZoom / size.height).coerceIn(0f, 1f)
+                            val y2 = ((maxOf(sy, ey) - offset.y) * invZoom / size.height).coerceIn(0f, 1f)
+                            if (x2 - x1 > 0.002f || y2 - y1 > 0.002f) {
                                 onPhraseSelected(x1, y1, x2, y2)
                             }
                         }
@@ -307,21 +315,22 @@ fun ZoomablePage(
             bitmap = bitmap.asImageBitmap(),
             contentDescription = "PDF page",
             modifier = Modifier
-                .align(Alignment.Center)
+                .fillMaxSize()
                 .graphicsLayer {
                     translationX = offset.x
                     translationY = offset.y
-                    scaleX = state.zoom
-                    scaleY = state.zoom
-                }
-                .fillMaxSize(),
+                    scaleX = zoom
+                    scaleY = zoom
+                },
             contentScale = ContentScale.Fit
         )
 
-        selectionStart?.let { start ->
-            selectionEnd?.let { end ->
-                SelectionOverlay(start = start, end = end, modifier = Modifier.fillMaxSize())
-            }
+        if (selectionStart != null && selectionEnd != null) {
+            SelectionOverlay(
+                start = selectionStart!!,
+                end = selectionEnd!!,
+                modifier = Modifier.fillMaxSize()
+            )
         }
 
         if (state.isRendering) {
