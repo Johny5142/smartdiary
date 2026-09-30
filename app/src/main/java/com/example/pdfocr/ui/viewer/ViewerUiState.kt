@@ -22,6 +22,7 @@ data class ViewerUiState(
     val library: List<LibraryBookEntity> = emptyList(),
     val dictionary: List<DictionaryEntryEntity> = emptyList(),
     val selectedPhrase: String? = null,
+    val isSentenceMode: Boolean = false,
     val translation: String? = null,
     val isTranslating: Boolean = false,
     val isSavingToDictionary: Boolean = false,

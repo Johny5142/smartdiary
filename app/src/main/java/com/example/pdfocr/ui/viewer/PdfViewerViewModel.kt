@@ -17,6 +17,7 @@ import com.example.pdfocr.data.translate.TranslationHelper
 import com.example.pdfocr.domain.model.Bookmark
 import com.example.pdfocr.domain.model.OcrLine
 import com.example.pdfocr.domain.usecase.DeleteBookmarkUseCase
+import com.example.pdfocr.domain.usecase.ExpandToSentenceUseCase
 import com.example.pdfocr.domain.usecase.FindWordsInSelectionUseCase
 import com.example.pdfocr.domain.usecase.ObserveBookmarksUseCase
 import com.example.pdfocr.domain.usecase.ToggleBookmarkUseCase
@@ -39,6 +40,7 @@ class PdfViewerViewModel(application: Application) : AndroidViewModel(applicatio
     private val libraryRepository = LibraryRepository(database.libraryDao())
     private val dictionaryRepository = DictionaryRepository(application, database.dictionaryDao())
     private val findWordsInSelection = FindWordsInSelectionUseCase()
+    private val expandToSentence = ExpandToSentenceUseCase()
 
     private val observeBookmarks = ObserveBookmarksUseCase(bookmarkRepository)
     private val toggleBookmarkUseCase = ToggleBookmarkUseCase(bookmarkRepository)
@@ -53,6 +55,7 @@ class PdfViewerViewModel(application: Application) : AndroidViewModel(applicatio
     private var libraryJob: Job? = null
     private var dictionaryJob: Job? = null
     private var saveJob: Job? = null
+    private var lastSelection: FloatArray? = null
 
     init {
         libraryJob = viewModelScope.launch {
@@ -139,9 +142,29 @@ class PdfViewerViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
-        fun onPhraseSelected(left: Float, top: Float, right: Float, bottom: Float) {
-                val state = uiState.value
+    fun onSentenceSelected(left: Float, top: Float, right: Float, bottom: Float) {
+        lastSelection = floatArrayOf(left, top, right, bottom)
+        expandAndTranslate()
+    }
+
+    fun translateLastSelectionAsSentence() {
+        val sel = lastSelection ?: return
+        onSentenceSelected(sel[0], sel[1], sel[2], sel[3])
+    }
+
+    private fun expandAndTranslate() {
+        val state = uiState.value
         val lines = ocrCache[state.currentPage] ?: return
+        val sel = lastSelection ?: return
+        val sentence = expandToSentence(lines, sel[0], sel[1], sel[2], sel[3])
+        if (sentence.isBlank()) return
+        translatePhrase(sentence, isSentence = true)
+    }
+
+    fun onPhraseSelected(left: Float, top: Float, right: Float, bottom: Float) {
+        val state = uiState.value
+        val lines = ocrCache[state.currentPage] ?: return
+        lastSelection = floatArrayOf(left, top, right, bottom)
         val phrase = findWordsInSelection(lines, left, top, right, bottom)
         if (phrase.isBlank()) return
 
@@ -157,14 +180,14 @@ class PdfViewerViewModel(application: Application) : AndroidViewModel(applicatio
                 error = null
             )
         }
-        if (cached == null) translate(phrase)
+        if (cached == null) translatePhrase(phrase)
     }
 
-    private fun translate(phrase: String) {
+    private fun translatePhrase(phrase: String, isSentence: Boolean = false) {
         viewModelScope.launch {
             try {
                 val translation = translationHelper.translateWord(phrase)
-                _uiState.update { it.copy(translation = translation, isTranslating = false) }
+                _uiState.update { it.copy(translation = translation, isTranslating = false, isSentenceMode = isSentence) }
             } catch (t: Throwable) {
                 _uiState.update {
                     it.copy(

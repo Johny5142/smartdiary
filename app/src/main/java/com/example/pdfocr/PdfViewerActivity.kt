@@ -19,6 +19,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.tween
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -222,7 +224,9 @@ fun ViewerScreen() {
             error = state.error,
             canSaveToDictionary = state.dictionaryName != null && !state.wasAddedToDictionary,
             isSaving = state.isSavingToDictionary,
+            isSentenceMode = state.isSentenceMode,
             onDismiss = viewModel::dismissTranslation,
+            onTranslateSentence = viewModel::translateLastSelectionAsSentence,
             onSaveToDictionary = viewModel::addCurrentTranslationToDictionary
         )
     }
@@ -403,30 +407,101 @@ fun TranslationPopup(
     error: String?,
     canSaveToDictionary: Boolean,
     isSaving: Boolean,
+    isSentenceMode: Boolean,
     onDismiss: () -> Unit,
-    onSaveToDictionary: () -> Unit
+    onSaveToDictionary: () -> Unit,
+    onTranslateSentence: () -> Unit
 ) {
     ModalBottomSheet(onDismissRequest = onDismiss) {
-        Column(Modifier.padding(20.dp)) {
+        Column(
+            Modifier
+                .padding(20.dp)
+                .animateContentSize(animationSpec = tween(250))
+        ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(phrase, style = MaterialTheme.typography.headlineSmall)
-                Spacer(Modifier.weight(1f))
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        phrase,
+                        style = MaterialTheme.typography.headlineSmall,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
                 IconButton(onClick = onDismiss) {
                     Icon(Icons.Default.Close, contentDescription = "Close")
                 }
             }
-            Spacer(Modifier.height(8.dp))
-            when {
-                isLoading || isSaving -> CircularProgressIndicator()
-                error != null -> Text(error, color = MaterialTheme.colorScheme.error)
-                translation != null -> Text(translation, style = MaterialTheme.typography.titleMedium)
+
+            if (isSentenceMode) {
+                Spacer(Modifier.height(4.dp))
+                Surface(
+                    shape = MaterialTheme.shapes.small,
+                    color = MaterialTheme.colorScheme.tertiaryContainer
+                ) {
+                    Text(
+                        "Full sentence",
+                        Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onTertiaryContainer
+                    )
+                }
             }
-            if (canSaveToDictionary && translation != null) {
-                Spacer(Modifier.height(16.dp))
-                Button(onClick = onSaveToDictionary) {
-                    Icon(Icons.Default.Add, contentDescription = null)
-                    Spacer(Modifier.width(6.dp))
-                    Text("Add to dictionary")
+
+            Spacer(Modifier.height(12.dp))
+            when {
+                isLoading || isSaving -> Row(
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(24.dp),
+                        strokeWidth = 2.5.dp
+                    )
+                    Spacer(Modifier.width(12.dp))
+                    Text(
+                        "Translating…",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
+
+                error != null -> Text(error, color = MaterialTheme.colorScheme.error)
+
+                translation != null -> Surface(
+                    shape = MaterialTheme.shapes.medium,
+                    color = MaterialTheme.colorScheme.primaryContainer,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        translation,
+                        Modifier.padding(16.dp),
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(20.dp))
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                if (!isSentenceMode) {
+                    OutlinedButton(
+                        onClick = onTranslateSentence,
+                        modifier = Modifier.weight(1f),
+                        enabled = !isLoading && !isSaving
+                    ) {
+                        Text("Sentence", maxLines = 1)
+                    }
+                }
+                if (canSaveToDictionary && translation != null) {
+                    Button(
+                        onClick = onSaveToDictionary,
+                        modifier = Modifier.weight(1f),
+                        enabled = !isLoading && !isSaving
+                    ) {
+                        Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("Save", maxLines = 1)
+                    }
                 }
             }
             Spacer(Modifier.height(24.dp))
