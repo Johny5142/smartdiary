@@ -1,118 +1,120 @@
-# SmartDiary — PDF Reader with OCR & On-Device Translation
+# SmartDiary — PDF-ридер с OCR и переводом на устройстве
 
-SmartDiary (internal project name **PdfOcrReader**) is an Android app for reading PDF books with built-in OCR text recognition and on-device word/phrase translation. It is designed for language learners: tap a word or select a whole phrase (phrasal verbs included) and get an instant translation — then save it to your personal dictionary.
+SmartDiary (внутреннее имя проекта **PdfOcrReader**) — Android-приложение для чтения PDF-книг со встроенным распознаванием текста (OCR) и переводом слов и фраз прямо на устройстве. Оно создано для изучающих языки: выделите слово или целую фразу (включая фразовые глаголы) и мгновенно получите перевод — а затем сохраните его в личный словарь.
 
-## Features
+## Возможности
 
-### 📖 PDF Reading
-- Open PDF files via the system file picker (SAF)
-- Page navigation (previous / next)
-- Resume reading from the last opened page — progress is saved automatically
-- Book library: previously opened books stay available in the start menu
+### 📖 Чтение PDF
+- Открытие PDF-файлов через системный файловый менеджер (SAF)
+- Навигация по страницам (назад / вперёд)
+- Возобновление чтения с последней страницы — прогресс сохраняется автоматически
+- Библиотека книг: ранее открытые книги остаются доступными в стартовом меню
+- Поле ввода номера страницы в нижней панели для быстрого перехода
 
-### 🔍 Zoom & Navigation
-- Pinch-to-zoom (1x–5x)
-- Pan across the page when zoomed in
-- **Translate / Move mode switch** — a floating toggle on the right edge:
-  - **Translate (on)**: drag to select words or phrases
-  - **Move (off)**: drag to pan the page freely
+### 🔍 Жестовое управление
+- Щипок двумя пальцами — зум (1x–5x), приближение вокруг точки щипка
+- Перетаскивание одним пальцем — перемещение по странице при увеличении
+- Долгое нажатие + перетаскивание — выделение слова или фразы для перевода
+- Отпускание пальца — завершение выделения и запуск перевода
 
-### 🌐 OCR & Translation
-- On-device OCR (ML Kit Text Recognition) — works with scanned PDFs too
-- Tap or drag-select a word or phrase to translate it
-- English → Russian translation out of the box (on-device ML Kit model, downloaded once over Wi-Fi)
+### 🌐 OCR и перевод
+- Распознавание текста на устройстве (ML Kit Text Recognition) — работает и со сканированными PDF
+- Выделите слово или фразу, чтобы получить перевод
+- Английский → русский перевод из коробки (модель ML Kit, скачивается один раз по Wi-Fi)
+- При зуме координаты выделения корректируются автоматически
 
-### 📚 Bookmarks & Library
-- Bookmark any page with one tap
-- Jump between bookmarks from the bookmarks sheet
-- Library of previously opened books with saved progress
+### 📚 Закладки и библиотека
+- Закладка на любой странице в один тап
+- Переход между закладками из панели закладок
+- Библиотека ранее открытых книг с сохранённым прогрессом
 
-### 🗂 Personal Dictionary (TXT)
-- Choose an existing `.txt` dictionary file, or create a new one right from the app
-- Supported line formats:
+### 🗂 Личный словарь (TXT)
+- Выбор существующего `.txt`-файла словаря или создание нового прямо из приложения
+- Поддерживаемые форматы строк:
   ```text
-  phrase - translation
-  phrase: translation
-  phrase<TAB>translation
+  фраза - перевод
+  фраза: перевод
+  фраза<TAB>перевод
   ```
-  Lines starting with `#` are ignored
-- After translating a word/phrase, tap **Add to dictionary** to append it to your TXT file
-- Duplicate entries are not added
-- Browse and delete dictionary entries in the dictionary sheet
+  Строки, начинающиеся с `#`, игнорируются
+- После перевода нажмите **«Add to dictionary»**, чтобы добавить слово в TXT-файл
+- Дубликаты не добавляются
+- Просмотр и удаление записей словаря в панели словаря
 
-## Tech Stack
+## Технологии
 
-| Layer | Technology |
+| Слой | Технология |
 |---|---|
-| Language | Kotlin |
+| Язык | Kotlin |
 | UI | Jetpack Compose + Material 3 |
-| Architecture | MVVM (ViewModel + StateFlow) |
-| PDF rendering | `android.graphics.pdf.PdfRenderer` |
+| Архитектура | MVVM (ViewModel + StateFlow) |
+| PDF-рендеринг | `android.graphics.pdf.PdfRenderer` |
 | OCR | ML Kit Text Recognition |
-| Translation | ML Kit On-Device Translation |
-| Storage | Room (SQLite) |
-| Async | Kotlin Coroutines + Flow |
+| Перевод | ML Kit On-Device Translation |
+| Хранение | Room (SQLite) |
+| Асинхронность | Kotlin Coroutines + Flow |
 
-## Project Structure
+## Структура проекта
 
 ```text
 app/src/main/java/com/example/pdfocr/
-├── MainActivity.kt              # Entry point
-├── PdfViewerActivity.kt         # Viewer UI (Compose)
+├── MainActivity.kt              # Точка входа
+├── PdfViewerActivity.kt         # UI ридера (Compose)
 ├── data/
-│   ├── local/                   # Room: entities, DAOs, database
-│   ├── ocr/                     # ML Kit OCR wrapper
-│   ├── pdf/                     # PdfRenderer wrapper
-│   ├── repository/              # Bookmark / Library / Dictionary repositories
-│   ├── translate/               # ML Kit translation wrapper
+│   ├── local/                   # Room: сущности, DAO, база данных
+│   ├── ocr/                     # Обёртка ML Kit OCR
+│   ├── pdf/                     # Обёртка PdfRenderer
+│   ├── repository/              # Репозитории: закладки / библиотека / словарь
+│   ├── translate/               # Обёртка ML Kit Translation
 │   └── ...
 ├── domain/
-│   ├── model/                   # Domain models
-│   ├── repository/              # Repository interfaces
-│   └── usecase/                 # Business logic (selection, bookmarks)
+│   ├── model/                   # Доменные модели
+│   ├── repository/              # Интерфейсы репозиториев
+│   └── usecase/                 # Бизнес-логика (выделение, закладки)
 └── ui/
-    ├── theme/                   # Compose theme
-    └── viewer/                  # ViewModel + UI state
+    ├── theme/                   # Тема Compose
+    └── viewer/                  # ViewModel + состояние UI
 ```
 
-## Requirements
+## Требования
 
-- Android Studio (Koala or newer recommended)
-- Android SDK 36 (compileSdk), min Android 10 (API 29)
+- Android Studio (рекомендуется Koala или новее)
+- Android SDK 36 (compileSdk), минимальный Android 10 (API 29)
 - JDK 17
 
-## Build
+## Сборка
 
-1. Clone the repository:
+1. Клонируйте репозиторий:
    ```bash
    git clone https://github.com/Johny5142/smartdiary.git
    cd smartdiary
    ```
-2. Open the project in **Android Studio** and let Gradle sync, **or** build from the command line:
+2. Откройте проект в **Android Studio** и дождитесь синхронизации Gradle, **или** соберите из командной строки:
    ```bash
    ./gradlew :app:assembleDebug
    ```
-3. Install the debug APK on a device/emulator:
+3. Установите debug-APK на устройство/эмулятор:
    ```bash
    adb install app/build/outputs/apk/debug/app-debug.apk
    ```
 
-## Usage
+## Использование
 
-1. Launch the app and pick a PDF (or choose one from the library).
-2. Wait for OCR to finish (see the `OCR…` indicator in the title).
-3. Keep the floating switch on **Translate** and drag over a word or phrase.
-4. Read the translation in the bottom sheet.
-5. Tap **Add to dictionary** to save it to your TXT dictionary.
-6. To zoom and pan, switch to **Move** or use the `−`/`+` buttons in the bottom bar.
-7. Bookmark pages with the bookmark icon; your reading position is saved automatically.
+1. Запустите приложение и выберите PDF (или откройте из библиотеки).
+2. Дождитесь завершения OCR (индикатор `OCR…` в заголовке).
+3. Зажмите палец на слове и потяните, чтобы выделить слово или фразу.
+4. Прочитайте перевод в открывшейся панели.
+5. Нажмите **«Add to dictionary»**, чтобы сохранить перевод в TXT-словарь.
+6. Щипком увеличьте страницу, одним пальцем перемещайтесь по ней.
+7. Введите номер страницы в нижнем поле и нажмите **«Go»** для быстрого перехода.
+8. Ставьте закладки иконкой-закладкой; позиция чтения сохраняется автоматически.
 
-## Notes
+## Примечания
 
-- The first translation startup downloads the on-device language model over Wi-Fi.
-- Dictionary writes append to the chosen TXT file; the file must be selected first.
-- OCR works on rendered page bitmaps, so it also handles scanned (non-searchable) PDFs.
+- При первом переводе модель языка скачивается по Wi-Fi.
+- Записи в словарь добавляются в конец выбранного TXT-файла; файл нужно выбрать заранее.
+- OCR работает с растровыми изображениями страниц, поэтому поддерживает и сканированные (непоисковые) PDF.
 
-## License
+## Лицензия
 
-All rights reserved. (Add a LICENSE file if you want to publish under MIT/Apache-2.0.)
+Все права защищены. (Добавьте файл LICENSE, если хотите публиковать под MIT/Apache-2.0.)
